@@ -74,10 +74,9 @@ def inlinequery(update, context):
         mode="all",
     )
 
-    for tag,iterCount in zip(tags, range(0,MAXRESULTS)):
-        for pricetag in pricetags:
-            price = int(pricetag.attrs["data-price-final"]) * 0.01
-            #print(f"Price is {price} and by 100 {price * 100}")
+    for tag, pricetag, iterCount in zip(tags, pricetags, range(0,MAXRESULTS)):
+        price = int(pricetag.attrs["data-price-final"]) * 0.01
+        #print(f"Price is {price} and by 100 {price * 100}")
         link = tag.attrs["href"]
         title = tag.text
         appid = tag.attrs["data-ds-appid"]
