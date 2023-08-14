@@ -24,7 +24,7 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, InlineQueryHandler, CommandHandler
 from telegram import InlineQueryResultArticle, InputTextMessageContent
 
-
+MAXRESULTS=6
 
 # Enable logging
 logging.basicConfig(
@@ -56,12 +56,11 @@ def inlinequery(update, context):
     results = []
 
     prefix = "https://store.steampowered.com/search/?term="
-    # "https://wiki.archlinux.org/index.php?profile=default&fulltext=Search&search="
 
     try:
         page = get(prefix + query)
     except Exception as e:
-        update.message.reply_text("Sorry, Steam wiki is offline.")
+        update.message.reply_text("Sorry, Steam is offline.")
         logger.error(e)
         return
 
@@ -74,19 +73,16 @@ def inlinequery(update, context):
         {"class": "col search_price_discount_combined responsive_secondrow"},
         mode="all",
     )
-    i = 0
-    for tag in tags:
+
+    for tag,iterCount in zip(tags, range(0,MAXRESULTS)):
         for pricetag in pricetags:
             price = int(pricetag.attrs["data-price-final"]) * 0.01
             #print(f"Price is {price} and by 100 {price * 100}")
-        if i >= 3:
-            update.inline_query.answer(results, cache_time=0)
-        i = +1
         link = tag.attrs["href"]
         title = tag.text
         appid = tag.attrs["data-ds-appid"]
-        #oprint(f"appid is: {appid}")
-        #print(f"This is title: {title}\nAnd this is link: {link} and this is appid {appid} and this is PRICE: {price}")
+        #DBGprint(f"appid is: {appid}")
+        #DBGprint(f"This is title: {title}\nAnd this is link: {link} and this is appid {appid} and this is PRICE: {price}")
         results.append(
             InlineQueryResultArticle(
                 id=uuid4(),
@@ -102,11 +98,12 @@ def inlinequery(update, context):
                 reply_markup=InlineKeyboardMarkup(
                     [
                         [
-                            InlineKeyboardButton("Steam Page", url=link),
+                            InlineKeyboardButton("Steam 💨", url=link),
                             InlineKeyboardButton(
-                                "ProtonDB page",
+                                "ProtonDB 🐧",
                                 url=f"https://www.protondb.com/app/{appid}",
                             ),
+                            InlineKeyboardButton("Price history 💨", url=f"https://isthereanydeal.com/game//info/"),
                             # [InlineKeyboardButton("Protondb")],
                         ]
                     ]
