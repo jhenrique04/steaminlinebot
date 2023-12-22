@@ -13,6 +13,9 @@ original archewikibot Updated in 27/05/2021 by: @NicKoehler
 """
 @Steaminlinebot written by GuaximFsg on github
 """
+"""
+@SteamInlineSearchBot updated by jhenrique04 on Github
+"""
 
 import os
 import logging
