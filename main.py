@@ -14,137 +14,113 @@ original archewikibot Updated in 27/05/2021 by: @NicKoehler
 @Steaminlinebot written by GuaximFsg on github
 """
 
-
 import os
-import sys
 import logging
+import requests
+import sys
 from uuid import uuid4
-from gazpacho import get, Soup
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Updater, InlineQueryHandler, CommandHandler
-from telegram import InlineQueryResultArticle, InputTextMessageContent
+from bs4 import BeautifulSoup
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update, InlineQueryResultArticle, InputTextMessageContent
+from telegram.ext import Updater, InlineQueryHandler, CommandHandler, CallbackContext
 
-MAXRESULTS=6
+MAXRESULTS = 4
 
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def start(update, context):
-    update.message.reply_text(
-        "This bot can search for steam games for you in in-line mode.\n/help for more info.",
-    )
+def start(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text("This bot can search for steam games for you in in-line mode.\n/help for more info.")
 
 
-def help(update, context):
-    update.message.reply_text(
-        """To search with this bot you can easily type @Steaminlinebot and then something you want to search. for example :
-@Steaminlinebot Skyrim
-or
-@steaminlinebot Stardew
-...""",
-    )
+def help(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text("To search with this bot you can easily type @Steaminlinebot and then something you want to search. for example:\n@SteamInlineSearchBot Skyrim")
 
 
-def inlinequery(update, context):
+def get_game_price(game_title: str):
+    url = f"https://www.cheapshark.com/api/1.0/games?title={game_title}&limit=1"
+    response = requests.get(url)
+    games = response.json()
+
+    if not games:
+        return "No price data available", None, None
+
+    game = games[0]
+    price_info = f"Price: ${game['cheapest']}"
+    thumb_url = game.get('thumb', '')
+    deal_id = game['cheapestDealID']
+
+    history_url = f"https://www.cheapshark.com/api/1.0/deals?id={deal_id}"
+    history_response = requests.get(history_url)
+    history_data = history_response.json()
+
+    historic_low = history_data.get('gameInfo', {}).get('salePrice', "No historical data")
+
+    return price_info, historic_low, thumb_url
+
+
+def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     results = []
 
     prefix = "https://store.steampowered.com/search/?term="
-
     try:
-        page = get(prefix + query)
+        response = requests.get(prefix + query)
+        soup = BeautifulSoup(response.text, 'html.parser')
     except Exception as e:
-        update.message.reply_text("Sorry, Steam is offline.")
         logger.error(e)
         return
 
-    html = Soup(page)
-    tags = html.find(
-        "a", {"data-ds-appid": ""}, mode="all"
-    )  # html tags containing info about each game
-    pricetags = html.find(
-        "div",
-        {"class": "col search_price_discount_combined responsive_secondrow"},
-        mode="all",
-    )
+    tags = soup.find_all("a", attrs={"data-ds-appid": True}, limit=MAXRESULTS)
+    
+    for tag in tags:
+        appid = tag['data-ds-appid']
+        title = tag.find("span", class_="title").text if tag.find("span", class_="title") else "No Title"
+        price_info, historic_low, thumb_url = get_game_price(title)
+        link = tag['href']
+        
+        buttons = [
+            InlineKeyboardButton("Steam 💨", url=link),
+            InlineKeyboardButton("ProtonDB 🐧", url=f"https://www.protondb.com/app/{appid}")
+        ]
 
-    for tag, pricetag, iterCount in zip(tags, pricetags, range(0,MAXRESULTS)):
-        price = int(pricetag.attrs["data-price-final"]) * 0.01
-        #print(f"Price is {price} and by 100 {price * 100}")
-        link = tag.attrs["href"]
-        title = tag.text
-        appid = tag.attrs["data-ds-appid"]
-        #DBGprint(f"appid is: {appid}")
-        #DBGprint(f"This is title: {title}\nAnd this is link: {link} and this is appid {appid} and this is PRICE: {price}")
         results.append(
             InlineQueryResultArticle(
                 id=uuid4(),
                 title=title,
                 hide_url=True,
-                description=f"Price: {price}",
-                thumb_url=f"https://cdn.akamai.steamstatic.com/steam/apps/{appid}/capsule_sm_120.jpg?t",  # low qual img
-                # description=description,
+                description=price_info,
+                thumb_url=thumb_url,
                 input_message_content=InputTextMessageContent(
-                    parse_mode="Markdown",
-                    message_text=f"[{title}](https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg?)\nPrice:R$ {price:.2f}",
+                    message_text = f"[{title}]({link})\n{price_info}\nHistoric Low: ${historic_low}",
+                    parse_mode="Markdown"
                 ),
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton("Steam 💨", url=link),
-                            InlineKeyboardButton(
-                                "ProtonDB 🐧",
-                                url=f"https://www.protondb.com/app/{appid}",
-                            ),
-                            InlineKeyboardButton("Price history 💨", url=f"https://isthereanydeal.com/game//info/"),
-                            # [InlineKeyboardButton("Protondb")],
-                        ]
-                    ]
-                ),
+                reply_markup=InlineKeyboardMarkup([buttons]),
             )
         )
 
     update.inline_query.answer(results, cache_time=0)
 
 
-def error(update, context):
+def error(update: Update, context: CallbackContext) -> None:
     logger.warning(f"Update {update} caused error {context.error}")
 
 
-def main():
-    # Create the Updater and pass it your bot's token.
-    try:
-        token = os.environ["BOT_TOKEN"]
-    except KeyError:
-        logger.critical("No BOT_TOKEN environment variable passed. Terminating.")
+def main() -> None:
+    token = os.environ.get("BOT_TOKEN")
+    if not token:
+        logger.critical("No BOT_TOKEN environment variable found. Terminating.")
         sys.exit(1)
-    updater = Updater(token)
 
-    # Get the dispatcher to register handlers
+    updater = Updater(token, use_context=True)
     dp = updater.dispatcher
 
-    # on different commands - answer in Telegram
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help))
-
-    # on noncommand i.e message - echo the message on Telegram
     dp.add_handler(InlineQueryHandler(inlinequery))
-
-    # log all errors
     dp.add_error_handler(error)
 
-    # Start the Bot
     updater.start_polling()
-
-    # Block until the user presses Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle()
 
 
