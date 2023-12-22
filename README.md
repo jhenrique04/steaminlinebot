@@ -1,4 +1,5 @@
 Steam Game Search Telegram Bot
+
 Description
 
 This Telegram bot allows users to search for games on Steam and get information such as current price, historical low price, and links to the game's Steam page and ProtonDB page. It utilizes the CheapShark API to fetch price data and BeautifulSoup for scraping Steam search results.
